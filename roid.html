@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steroidrechner - by Julian Huch</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+        #chart {
+            width: 100%;
+            height: 500px;
+            margin-top: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Steroidrechner - by Julian Huch</h1>
+
+        <div class="form-group">
+            <label for="compoundType">Darreichungsform:</label>
+            <select id="compoundType" class="form-control">
+                <option value="oral">Orals</option>
+                <option value="injectable">Injectables</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="compound">Wirkstoff:</label>
+            <select id="compound" class="form-control"></select>
+        </div>
+
+        <div class="form-group" id="esterGroup"> <label for="ester">Ester (nur bei Injektion):</label>
+             <select id="ester" class="form-control"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="dosage">Dosierung pro Gabe/Injektion (mg):</label>
+            <input type="number" id="dosage" class="form-control" value="100">
+        </div>
+
+         <div class="form-group">
+                <label for="frequency">Einnahme/Injektionsintervall (Tage):</label>
+                <input type="number" id="frequency" class="form-control" value="7">
+         </div>
+
+
+        <div class="form-group">
+            <label for="cycleLength">Zykluslänge (Wochen):</label>
+            <input type="number" id="cycleLength" class="form-control" value="12">
+        </div>
+        <button class="btn btn-primary" onclick="calculate()">Berechnen</button>
+        <div id="chart"></div>
+    </div>
+
+    <script>
+        const halfLifeData = {
+            Anadrol: { base: 'Oxymetholone', esters: [{ name: null, halfLife: 9, unit: 'hours' }] }, 
+            Anavar: { base: 'Oxandrolone', esters: [{ name: null, halfLife: 9, unit: 'hours' }] },
+            Arimidex: { base: 'Anastrozole', esters: [{ name: null, halfLife: 48, unit: 'hours' }] },
+            Aromasin: { base: 'Exemestane', esters: [{ name: null, halfLife: 24, unit: 'hours' }] },
+            DNP: { base: '2,4-Dinitrophenol', esters: [{ name: null, halfLife: 36, unit: 'hours' }] },
+            Dianabol: { base: 'Methandrostenolone', esters: [{ name: null, halfLife: 4.5, unit: 'hours' }, {name: 'Injectable (rare)', halfLife: 24, unit: 'hours'}]},  //Selten injizierbar hinzugefügt
+            Epistane: { base: 'Epitiostanol', esters: [{ name: null, halfLife: 9, unit: 'hours' }] },
+            Halotestin: { base: 'Fluoxymesterone', esters: [{ name: null, halfLife: 9, unit: 'hours' }] }, 
+            Superdrol: { base: 'Methasterone', esters: [{ name: null, halfLife: 8, unit: 'hours' }] },
+            Turinabol: { base: '4-Chlorodehydromethyltestosterone', esters: [{ name: null, halfLife: 16, unit: 'hours' }] },
+            Winstrol: { base: 'Stanozolol', esters: [{ name: null, halfLife: 9, unit: 'hours' }, { name: 'Suspension', halfLife: 24, unit: 'hours' }] },
+            Boldenone: {
+                base: 'Boldenone', esters: [
+                    { name: 'Undecylenate', halfLife: 14, unit: 'days' },
+                    { name: 'Cypionate', halfLife: 6, unit: 'days' }]
+
+            },
+            'Dihydroboldenone (DHB)': {
+                base: 'Dihydroboldenone', esters: [
+                    { name: 'Cypionate', halfLife: 6, unit: 'days' },
+                     {name: 'Enanthate', halfLife: 5, unit: 'days'},
+                    { name: 'Other', halfLife: 5, unit: 'days' }] // Maybe other esters
+            },
+            Masteron: {
+                base: 'Drostanolone', esters: [
+                    { name: 'Propionate', halfLife: 2.5, unit: 'days' },
+                    { name: 'Enanthate', halfLife: 5, unit: 'days' }]
+            },
+            Nandrolone: {
+                base: 'Nandrolone', esters: [
+                    { name: 'Decanoate', halfLife: 7, unit: 'days' },
+                    { name: 'Phenylpropionate', halfLife: 2.7, unit: 'days' },
+                    {name: 'Laurate', halfLife: 18, unit: 'days'}]
+            },
+            Primobolan: {
+                base: 'Metenolone', esters: [
+                    { name: 'Enanthate', halfLife: 5, unit: 'days' }, 
+                    { name: 'Acetate', halfLife: 2, unit: 'days' }] // Oral
+            },
+            Testosterone: {
+                base: 'Testosterone', esters: [
+                    { name: 'Enanthate', halfLife: 5, unit: 'days' },
+                    { name: 'Cypionate', halfLife: 6, unit: 'days' },
+                    { name: 'Propionate', halfLife: 2, unit: 'days' },
+                    { name: 'Undecanoate', halfLife: 21, unit: 'days', note: 'Injectable' },
+                    {name: 'Undecanoate', halfLife: 33, unit: 'days', note: 'Oral (Andriol)'},
+                    { name: 'Suspension', halfLife: 1, unit: 'days' },
+                    { name: 'Isocaproate', halfLife: 6, unit: 'days' },
+                    { name: 'Phenylpropionate', halfLife: 2.7, unit: 'days' }]
+            },
+            Trenbolone: {
+                base: 'Trenbolone', esters: [
+                    { name: 'Acetate', halfLife: 2, unit: 'days' }, 
+                    { name: 'Enanthate', halfLife: 5, unit: 'days' }, 
+                    { name: 'Hexahydrobenzylcarbonate', halfLife: 14, unit: 'days' }]
+            },
+            'Trestolone (MENT)': {
+                base: 'Trestolone', esters: [
+                    { name: 'Acetate', halfLife: 3, unit: 'days' }]
+            }
+        };
+
+
+        function updateCompounds() {
+            const type = document.getElementById('compoundType').value;
+            const compoundSelect = document.getElementById('compound');
+            const esterGroup = document.getElementById('esterGroup');
+            const esterSelect = document.getElementById('ester');
+
+            compoundSelect.innerHTML = ''; // Cancel the compound selection
+            esterSelect.innerHTML = '';     // Cancel the Ester selection
+
+            if(type === 'injectable'){
+                esterGroup.classList.remove('hidden'); // Show the Ester selection for injectables
+
+                // Fill the compound selection with all compounds that have an ester
+                for (const compoundKey in halfLifeData){
+                   if(halfLifeData[compoundKey].esters[0].name !== null){
+                        const option = document.createElement('option');
+                        option.value = compoundKey;
+                        option.textContent = compoundKey;
+                        compoundSelect.appendChild(option);
+                   }
+                }
+
+            } else {
+                esterGroup.classList.add('hidden'); // Hide the Ester selection for orals
+                for (const compoundKey in halfLifeData){
+                   if(halfLifeData[compoundKey].esters[0].name === null){
+                        const option = document.createElement('option');
+                        option.value = compoundKey;
+                        option.textContent = compoundKey;
+                        compoundSelect.appendChild(option);
+                   }
+                }
+            }
+
+            // Important: Update the Ester selection when the compound changes
+            updateEsters();
+        }
+
+
+
+         function updateEsters() {
+            const compound = document.getElementById('compound').value;
+            const esterSelect = document.getElementById('ester');
+            esterSelect.innerHTML = ''; // Cancel the Ester selection
+
+            if (halfLifeData[compound]) { // Check if the compound exists
+                halfLifeData[compound].esters.forEach(ester => {
+                    // Fill the Ester selection with all esters of the selected compound
+                    if (ester.name !== null) {
+                        const option = document.createElement('option');
+                        option.value = ester.name;
+                        option.textContent = ester.name;
+                        esterSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+
+
+        // Event-Listener
+        document.getElementById('compoundType').addEventListener('change', updateCompounds);
+        document.getElementById('compound').addEventListener('change', updateEsters); // Event-Listener for the compound selection
+
+        // Call the function to fill the compound selection
+        updateCompounds();
+
+
+        function calculate() {
+            const compound = document.getElementById('compound').value;
+            const ester = document.getElementById('ester').value; 
+            const dose = parseFloat(document.getElementById('dosage').value);
+            const cycleLength = parseInt(document.getElementById('cycleLength').value);
+            const frequency = parseFloat(document.getElementById('frequency').value); // Frequency in days
+
+             // Calculate the half-life
+            let halfLife;
+            if(document.getElementById('compoundType').value === 'oral'){
+               halfLife = halfLifeData[compound].esters[0].halfLife;
+            }
+            else{
+                const esterData = halfLifeData[compound].esters.find(e => e.name === ester);
+                halfLife = esterData ? esterData.halfLife : null;
+            }
+
+
+            if (halfLife === null) {
+                alert("Halbwertszeit für die ausgewählte Verbindung und Ester nicht gefunden.");
+                return;
+            }
+
+             // Calculate the half-life in hours
+             const halfLifeInHours = halfLifeData[compound].esters.find(e => e.name === (document.getElementById('compoundType').value === 'oral' ? null : ester)).unit === 'days' ? halfLife * 24 : halfLife;
+
+
+            const totalDays = cycleLength * 7;
+
+            const x = [];
+            const y = [];
+            let currentLevel = 0;
+
+            for (let i = 0; i < totalDays; i++) {
+                // Calculate the dose
+                if (i % frequency === 0) {
+                    currentLevel += dose;
+                }
+
+                x.push(i);
+                y.push(currentLevel);
+
+                // Lose half of the compound every half-life
+                currentLevel = currentLevel * Math.exp(-Math.log(2) / halfLifeInHours * (24/frequency));
+            }
+
+            const data = [{
+                x: x,
+                y: y,
+                type: 'scatter',
+                mode: 'lines',
+                name: compound + (ester ? ` (${ester})` : '') // Show in the title if an ester is selected
+            }];
+
+            const layout = {
+                title: compound + (ester ? ` (${ester})` : '') + '-Spiegel im Blut',
+                xaxis: { title: 'Tage' },
+                yaxis: { title: 'mg' }
+            };
+
+            Plotly.newPlot('chart', data, layout);
+        }
+    </script>
+</body>
+</html>
